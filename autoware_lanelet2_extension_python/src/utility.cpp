@@ -16,6 +16,7 @@
 
 // NOLINTBEGIN(readability-identifier-naming)
 
+#include <autoware_lanelet2_extension/utility/message_conversion.hpp>
 #include <autoware_lanelet2_extension/utility/query.hpp>
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -28,8 +29,8 @@
 #include <lanelet2_core/primitives/Lanelet.h>
 #include <lanelet2_python/internal/converter.h>
 
-#include <iostream>
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -383,6 +384,26 @@ lanelet::ConstLanelets getCurrentLanelets_pose(
   return current_lanelets;
 }
 
+lanelet::LaneletMapPtr fromBinMsg_wrapper(const std::string & msg_byte)
+{
+  rclcpp::SerializedMessage serialized_msg;
+  static constexpr size_t message_header_length = 8u;
+  serialized_msg.reserve(message_header_length + msg_byte.size());
+  serialized_msg.get_rcl_serialized_message().buffer_length = msg_byte.size();
+  for (size_t i = 0; i < msg_byte.size(); ++i) {
+    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+    serialized_msg.get_rcl_serialized_message().buffer[i] = msg_byte[i];
+    // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+  }
+  autoware_map_msgs::msg::LaneletMapBin msg;
+  static rclcpp::Serialization<autoware_map_msgs::msg::LaneletMapBin> serializer;
+  serializer.deserialize_message(&serialized_msg, &msg);
+
+  auto map = std::make_shared<lanelet::LaneletMap>();
+  lanelet::utils::conversion::fromBinMsg(msg, map);
+  return map;
+}
+
 }  // namespace
 
 // for handling functions with default arguments
@@ -505,10 +526,10 @@ BOOST_PYTHON_MODULE(_autoware_lanelet2_extension_python_boost_python_utility)
     "getLinkedParkingSpaces", lanelet::utils::query::getLinkedParkingSpaces);
   // NOTE: required for iterating the return-value of getLinkedParkingSpaces/getAllParkingLots, but
   // this causes RuntimeWarning for duplicate to-Python converter
-  bp::class_<lanelet::ConstLineStrings3d>("lanelet::ConstLineStrings3d")
-    .def(bp::vector_indexing_suite<lanelet::ConstLineStrings3d>());
-  bp::class_<lanelet::ConstPolygons3d>("lanelet::ConstPolygons3d")
-    .def(bp::vector_indexing_suite<lanelet::ConstPolygons3d>());
+  // bp::class_<lanelet::ConstLineStrings3d>("lanelet::ConstLineStrings3d")
+  //  .def(bp::vector_indexing_suite<lanelet::ConstLineStrings3d>());
+  // bp::class_<lanelet::ConstPolygons3d>("lanelet::ConstPolygons3d")
+  //  .def(bp::vector_indexing_suite<lanelet::ConstPolygons3d>());
 
   bp::def<lanelet::Optional<lanelet::ConstLanelet>(
     const lanelet::ConstLineString3d &, const lanelet::ConstLanelets &,
@@ -571,15 +592,16 @@ BOOST_PYTHON_MODULE(_autoware_lanelet2_extension_python_boost_python_utility)
   bp::def("getCurrentLanelets_point", ::getCurrentLanelets_point);  // depends on ros msg
   bp::def("getCurrentLanelets_pose", ::getCurrentLanelets_pose);    // depends on ros msg
   // NOTE: this is required for iterating getCurrentLanelets return value directly
-  bp::class_<lanelet::ConstLanelets>("lanelet::ConstLanelets")
-    .def(bp::vector_indexing_suite<lanelet::ConstLanelets>());
+  // bp::class_<lanelet::ConstLanelets>("lanelet::ConstLanelets")
+  //  .def(bp::vector_indexing_suite<lanelet::ConstLanelets>());
   // NOTE: this is required for return-type of getSucceeding/PrecedingLaneletSequences
-  bp::class_<std::vector<lanelet::ConstLanelets>>("std::vector<lanelet::ConstLanelets>")
-    .def(bp::vector_indexing_suite<std::vector<lanelet::ConstLanelets>>());
+  // bp::class_<std::vector<lanelet::ConstLanelets>>("std::vector<lanelet::ConstLanelets>")
+  //  .def(bp::vector_indexing_suite<std::vector<lanelet::ConstLanelets>>());
   bp::def("getSucceedingLaneletSequences", lanelet::utils::query::getSucceedingLaneletSequences);
   bp::def(
     "getPrecedingLaneletSequences", lanelet::utils::query::getPrecedingLaneletSequences,
     getPrecedingLaneletSequences_overload());
+  bp::def("fromBinMsg", fromBinMsg_wrapper);
 }
 
 // NOLINTEND(readability-identifier-naming)
